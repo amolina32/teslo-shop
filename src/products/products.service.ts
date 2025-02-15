@@ -6,6 +6,7 @@ import { Product } from './entities/product.entity';
 import { Repository } from 'typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { isUUID } from 'class-validator';
+import { ProductImage } from './entities/product-image.entity';
 
 @Injectable()
 export class ProductsService {
@@ -13,22 +14,28 @@ export class ProductsService {
   constructor(
     @InjectRepository(Product)
     private readonly productRepository: Repository<Product>,
+    @InjectRepository(ProductImage)
+    private readonly productImageRepository: Repository<ProductImage>,
   ) { }
 
   async create(createProductDto: CreateProductDto) {
     try {
-      const product = this.productRepository.create(createProductDto);
+      const { images = [], ...producDetails } = createProductDto;
+      const product = this.productRepository.create({ ...producDetails, images: images.map(image => this.productImageRepository.create({ url: image })) });
       await this.productRepository.save(product);
-      return product;
+      return {...product, images};
     } catch (error) {
       this.handleExceptions(error);
     }
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
+    const { images = [], ...producDetails } = updateProductDto;
+
     const product = await this.productRepository.preload({
       id: id,
-      ...updateProductDto,
+      ...producDetails,
+      images: images.map(image => this.productImageRepository.create({ url: image }))
     });
 
     if (!product) {
@@ -50,7 +57,8 @@ export class ProductsService {
   async findAll(paginationDto: PaginationDto) {
     try {
       const { limit = 10, offset = 0 } = paginationDto;
-      return await this.productRepository.find({ take: limit, skip: offset });
+      const products =  await this.productRepository.find({ take: limit, skip: offset, relations: {images: true} });
+      return products.map(product => ({...product, images: product.images?.map(image => image.url)}));
     } catch (error) {
       this.handleExceptions(error);
       throw new InternalServerErrorException('Unnespected error, please check server logs');
@@ -63,8 +71,9 @@ export class ProductsService {
     if (isUUID(term)) {
       product = await this.productRepository.findOneBy({ id: term });
     } else {
-      product = await this.productRepository.createQueryBuilder()
+      product = await this.productRepository.createQueryBuilder('prod')
         .where('lower(title) = :term or slug = :term', { term: term.toLowerCase() })
+        .leftJoinAndSelect('prod.images', 'images')
         .getOne();
     }
 
@@ -72,6 +81,11 @@ export class ProductsService {
       throw new NotFoundException(`Product with ${term} not found`);
     }
     return product;
+  }
+
+  async finOnePlane(term:string){
+    const {images = [], ...producDetails} = await this.findOne(term);
+    return {...producDetails, images: images.map(image => image.url)};
   }
 
   private handleExceptions(error: any) {
