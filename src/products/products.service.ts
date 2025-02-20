@@ -1,9 +1,15 @@
-import { BadRequestException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Product } from './entities/product.entity';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { PaginationDto } from 'src/common/dtos/pagination.dto';
 import { isUUID } from 'class-validator';
 import { ProductImage } from './entities/product-image.entity';
@@ -16,35 +22,55 @@ export class ProductsService {
     private readonly productRepository: Repository<Product>,
     @InjectRepository(ProductImage)
     private readonly productImageRepository: Repository<ProductImage>,
-  ) { }
+    private readonly dataSource: DataSource,
+  ) {}
 
   async create(createProductDto: CreateProductDto) {
     try {
       const { images = [], ...producDetails } = createProductDto;
-      const product = this.productRepository.create({ ...producDetails, images: images.map(image => this.productImageRepository.create({ url: image })) });
+      const product = this.productRepository.create({
+        ...producDetails,
+        images: images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        ),
+      });
       await this.productRepository.save(product);
-      return {...product, images};
+      return { ...product, images };
     } catch (error) {
       this.handleExceptions(error);
     }
   }
 
   async update(id: string, updateProductDto: UpdateProductDto) {
-    const { images = [], ...producDetails } = updateProductDto;
+    const { images, ...productDetails } = updateProductDto;
 
     const product = await this.productRepository.preload({
-      id: id,
-      ...producDetails,
-      images: images.map(image => this.productImageRepository.create({ url: image }))
+      id,
+      ...productDetails,
     });
 
     if (!product) {
       throw new NotFoundException(`Product with id ${id} not found`);
     }
 
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-      return await this.productRepository.save(product);
+      if (images) {
+        await queryRunner.manager.delete(ProductImage, { product: { id } });
+        product.images = images.map((image) =>
+          this.productImageRepository.create({ url: image }),
+        );
+      }
+
+      await queryRunner.manager.save(product);
+      await queryRunner.commitTransaction();
+      return this.finOnePlane(id);
     } catch (error) {
+      await queryRunner.rollbackTransaction();
+      await queryRunner.release();
       this.handleExceptions(error);
     }
   }
@@ -57,11 +83,20 @@ export class ProductsService {
   async findAll(paginationDto: PaginationDto) {
     try {
       const { limit = 10, offset = 0 } = paginationDto;
-      const products =  await this.productRepository.find({ take: limit, skip: offset, relations: {images: true} });
-      return products.map(product => ({...product, images: product.images?.map(image => image.url)}));
+      const products = await this.productRepository.find({
+        take: limit,
+        skip: offset,
+        relations: { images: true },
+      });
+      return products.map((product) => ({
+        ...product,
+        images: product.images?.map((image) => image.url),
+      }));
     } catch (error) {
       this.handleExceptions(error);
-      throw new InternalServerErrorException('Unnespected error, please check server logs');
+      throw new InternalServerErrorException(
+        'Unnespected error, please check server logs',
+      );
     }
   }
 
@@ -71,8 +106,11 @@ export class ProductsService {
     if (isUUID(term)) {
       product = await this.productRepository.findOneBy({ id: term });
     } else {
-      product = await this.productRepository.createQueryBuilder('prod')
-        .where('lower(title) = :term or slug = :term', { term: term.toLowerCase() })
+      product = await this.productRepository
+        .createQueryBuilder('prod')
+        .where('lower(title) = :term or slug = :term', {
+          term: term.toLowerCase(),
+        })
         .leftJoinAndSelect('prod.images', 'images')
         .getOne();
     }
@@ -83,9 +121,9 @@ export class ProductsService {
     return product;
   }
 
-  async finOnePlane(term:string){
-    const {images = [], ...producDetails} = await this.findOne(term);
-    return {...producDetails, images: images.map(image => image.url)};
+  async finOnePlane(term: string) {
+    const { images = [], ...producDetails } = await this.findOne(term);
+    return { ...producDetails, images: images.map((image) => image.url) };
   }
 
   private handleExceptions(error: any) {
@@ -93,8 +131,17 @@ export class ProductsService {
       throw new BadRequestException(error.detail);
     }
     this.logger.error(error);
-    throw new InternalServerErrorException('Unnespected error, please check server logs');
+    throw new InternalServerErrorException(
+      'Unnespected error, please check server logs',
+    );
   }
 
+  async deleteAllProducts() {
+    try {
+      const queryBuilder = this.productRepository.createQueryBuilder('produc');
+      return await queryBuilder.delete().execute();
+    } catch (error) {
+      throw new InternalServerErrorException(error);
+    }
+  }
 }
-
