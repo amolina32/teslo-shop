@@ -15,8 +15,11 @@ import { diskStorage } from 'multer';
 import { fileNamer } from './helpers/fileName.helper';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { Auth } from '../auth/decorators/auth.decorator';
+import { ValidRoles } from 'src/auth/interfaces/valid-roles';
 
 @Controller('files')
+@Auth()
 export class FilesController {
   constructor(
     private readonly filesService: FilesService,
@@ -24,6 +27,7 @@ export class FilesController {
   ) {}
 
   @Get('product/:imageName')
+  @Auth(ValidRoles.user)
   findProductImage(
     @Res() res: Response,
     @Param('imageName') imageName: string,
@@ -33,6 +37,7 @@ export class FilesController {
   }
 
   @Post('product')
+  @Auth(ValidRoles.admin, ValidRoles.superUser)
   @UseInterceptors(
     FileInterceptor('file', {
       fileFilter: fileFilter,

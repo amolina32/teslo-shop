@@ -14,6 +14,7 @@ import { User } from './entities/user.entity';
 import { UserRoleGuard } from './guards/user-role/user-role.guard';
 import { RoleProtected } from './decorators/role-protected.decorator';
 import { ValidRoles } from './interfaces/valid-roles';
+import { Auth } from './decorators/auth.decorator';
 
 @Controller('auth')
 export class AuthController {
@@ -30,22 +31,8 @@ export class AuthController {
   }
 
   @Get('private')
-  @UseGuards(AuthGuard())
-  testingPrivateRoute(@GetUser() user: User, @GetUser('email') email: string) {
-    return { message: 'This is a private route', user, email };
-  }
-
-  @Get('private2')
-  @SetMetadata('roles', ['admin', 'super-user'])
-  @UseGuards(AuthGuard(), UserRoleGuard)
-  testingPrivateRoute2(@GetUser() user: User) {
-    return { message: 'This is a private route', user };
-  }
-
-  @Get('private3')
-  @RoleProtected(ValidRoles.admin, ValidRoles.superUser)
-  @UseGuards(AuthGuard(), UserRoleGuard)
-  testingPrivateRoute3(@GetUser() user: User) {
+  @Auth(ValidRoles.admin)
+  testingPrivateRoute4(@GetUser() user: User) {
     return { message: 'This is a private route', user };
   }
 }

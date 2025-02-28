@@ -20,6 +20,8 @@ export class UserRoleGuard implements CanActivate {
       'roles',
       context.getHandler(),
     );
+    if (!validRoles) return true;
+    if (validRoles.length === 0) return true;
 
     const req = context.switchToHttp().getRequest();
     const user = req.user as User;
@@ -30,7 +32,7 @@ export class UserRoleGuard implements CanActivate {
     if (validRoles.some((role) => user.roles.includes(role))) return true;
 
     throw new ForbiddenException(
-      'You do not have permission to access this route',
+      `User ${user.fullName} need a valid role: ${validRoles.join(', ')}`,
     );
   }
 }
