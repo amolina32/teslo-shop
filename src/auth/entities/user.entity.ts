@@ -30,6 +30,8 @@ export class User {
   @OneToMany(() => Product, (product) => product.user)
   product: Product;
 
+  @Column('text', { nullable: true })
+  temporalTokenKey: string | null;
 
   @BeforeInsert()
   checkFieldsBeforeInsert() {
