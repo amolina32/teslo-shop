@@ -28,8 +28,8 @@ export class AuthService {
 
       const user = this.userRepository.create(createAuthDto);
       await this.userRepository.save(user);
-
-      return user;
+      const { password: passwordDelete, isActive,...userData } = user;
+      return userData;
     } catch (error) {
       this.handleExceptions(error);
     }
@@ -39,7 +39,7 @@ export class AuthService {
     const { email, password } = loginUserDto;
     const user = await this.userRepository.findOne({
       where: { email: email.toLocaleLowerCase() },
-      select: { email: true, password: true, id: true },
+      select: { email: true, password: true, id: true, fullName: true  },
     });
 
     if (!user || !bcrypt.compareSync(password, user.password)) {
@@ -49,6 +49,12 @@ export class AuthService {
     return { ...userData, token: this.getJwtToken({ id: user.id }) };
   }
 
+
+  checkAuthStatus(user: User) {
+    const { password: passwordDelete, id, ...userData } = user;
+    return { ...userData, token: this.getJwtToken({ id: user.id }) };
+
+  }
   private getJwtToken(payload: JwtPayload): string {
     return this.jwtService.sign(payload);
   }

@@ -16,7 +16,7 @@ import { fileNamer } from './helpers/fileName.helper';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { Auth } from '../auth/decorators/auth.decorator';
-import { ValidRoles } from 'src/auth/interfaces/valid-roles';
+import { ValidRoles } from '../auth/interfaces/valid-roles';
 
 @Controller('files')
 @Auth()
