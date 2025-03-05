@@ -11,7 +11,7 @@ export class SeedController {
   constructor(private readonly seedService: SeedService) {}
 
   @Get()
-  @Auth(ValidRoles.admin, ValidRoles.superUser)
+  // @Auth(ValidRoles.admin, ValidRoles.superUser)
   execureSeed() {
     return this.seedService.runSeed();
   }
